@@ -1,128 +1,63 @@
-# ReciprocityLock
+# ReciprocityLock v1.1
 
-> **Honest limitation.** ReciprocityLock evaluates exactly one declared bilateral right in submitted text: whether that right is granted to both declared roles under the same conditions. It does not assess fairness, legal enforceability, commercial balance, real-world identity, or whether an off-chain agreement was actually terminated. `EXITED` is only the irreversible state of this contract.
+ReciprocityLock is the GenLayer Intelligent Contract behind PactMirror. It evaluates exactly one declared bilateral right: whether that right is granted to both declared roles under the same conditions.
 
-## What it does
+> **Honest limitation.** ReciprocityLock does not assess overall fairness, legal enforceability, commercial balance, real-world identity, or whether an off-chain agreement was actually terminated. `EXITED` is only the irreversible state of this contract.
 
-ReciprocityLock is the Intelligent Contract behind PactMirror.
+The mirrored right in V1 is shared and one-shot. This is suitable for termination/withdrawal rights and would mis-model independently repeatable rights such as audit or inspection rights.
 
-A creator declares:
+The rubric is public through `get_rubric`, so semantic grinding is not a closed problem. A creator can aim at the rubric within the five-attempt cap. The deterrents are the small cap, permanent attempt history, and the fact that a successful mirrored term also arms the counterparty with the same one-shot right.
 
-- Party A and Party B
-- one role label for each party
-- exactly one bilateral right
+At an assumed independent model error rate of 10%, the probability of at least one erroneous mirrored result in five attempts is `1 - 0.9^5 ≈ 0.41`.
 
-The creator then submits natural-language terms. GenLayer validators return only:
+## State machine
+
+```text
+PENDING -- accept_pact by Party B --> DRAFT
+DRAFT   -- RIGHT_NOT_MIRRORED     --> DRAFT
+DRAFT   -- RIGHT_MIRRORED         --> ACTIVE
+ACTIVE  -- exercise_right by A/B  --> EXITED
+```
+
+Party B is nominated by the creator but must submit a separate on-chain acceptance before any semantic term can be submitted. This proves address-level participation, not independent real-world identity; one person can still control both wallets.
+
+## AI boundary
+
+Validators may return only:
 
 ```text
 RIGHT_MIRRORED
 RIGHT_NOT_MIRRORED
 ```
 
-`RIGHT_MIRRORED` means the declared right is actually granted to both roles under the same conditions.
+Malformed JSON, a non-object response, a missing verdict, or an unknown label raises `Invalid semantic output`. The transaction rolls back, so `attempt_count` does not increase and no fabricated verdict is stored.
 
-`RIGHT_NOT_MIRRORED` covers cases where:
+## Deterministic controls
 
-- one role lacks the declared right,
-- both roles lack the declared right,
-- one role has broader or easier conditions,
-- or one role has an additional independent route to use the declared right.
+- Party B must be nonzero and different from the creator.
+- Only Party B can accept a pending pact.
+- Only the creator can submit terms after acceptance.
+- All Python whitespace runs collapse before term hashing.
+- Exact normalized replay is rejected.
+- At most five converged attempts are stored.
+- A mirrored term closes further submission.
+- Either declared party may exercise the active right once.
+- Reserved prompt tokens are rejected, not sanitized.
 
-## Why GenLayer
-
-The contract must interpret semantic equivalence under a role swap, not just keywords or sentence structure.
-
-For example:
+## StudioNet v1.1 deployment
 
 ```text
-Each side is free to end this agreement on thirty days written notice.
+Contract: 0x8F84adB020C953a1415Cc4ac5eF2617Ec97DBb12
+Deploy tx: 0x0294f79384c1942f57d14a9299704c1d1c99a8773a040be2f642131deae39b4a
+Explorer: https://explorer-studio.genlayer.com/address/0x8F84adB020C953a1415Cc4ac5eF2617Ec97DBb12
 ```
 
-was observed on StudioNet as:
+Observed: GenVM `SUCCESS`, consensus `Accepted`, and accepted `get_config` reports version `1.1` with the `PENDING` state.
+
+Historical v1.0 address, not valid as v1.1 evidence:
 
 ```text
-RIGHT_MIRRORED
-```
-
-while:
-
-```text
-The Provider may terminate on thirty days notice; the Customer may terminate the hosting module alone.
-```
-
-was observed as:
-
-```text
-RIGHT_NOT_MIRRORED
-```
-
-The semantic output is intentionally narrow. AI decides only the verdict. The contract determines all state transitions and authorization.
-
-## Deterministic consequence
-
-```text
-DRAFT
-  |
-  | RIGHT_NOT_MIRRORED
-  v
-DRAFT
-
-DRAFT
-  |
-  | RIGHT_MIRRORED
-  v
-ACTIVE
-  |
-  | exercise_right by Party A or Party B
-  v
-EXITED
-```
-
-Once a mirrored term becomes active, no further term may be submitted.
-
-`exercise_right` is deterministic and one-shot. Either declared party may call it. The first successful call records `exited_by` and permanently moves the pact to `EXITED`.
-
-## Multi-tenant
-
-Any wallet may create its own pact.
-
-There is:
-
-```text
-no global admin
-no deployer privilege
-no clock
-no token
-no external web source
-```
-
-The pact ID includes the creator address, so different wallets can independently use the same pact name.
-
-## Authorization
-
-```text
-create_pact      any wallet
-submit_term      Party A / creator only
-exercise_right   Party A OR Party B only
-```
-
-## Anti-replay / grinding controls
-
-- exact term replay is rejected by content-addressed `term_id`
-- maximum 5 term attempts per pact
-- every converged attempt remains in the attempt log
-- once `RIGHT_MIRRORED` activates a term, further submission is closed
-
-## StudioNet deployment
-
-```text
-Contract:
 0x478942A99631cB3357f4480210AF9c5a9bc8c3C2
-
-Explorer:
-https://explorer-studio.genlayer.com/address/0x478942A99631cB3357f4480210AF9c5a9bc8c3C2
 ```
 
-## Runtime result
-
-The kill-concept pair and the normal 5-transaction flow were executed successfully on StudioNet. See `TESTING.md`.
+See `TEST_PLAN.md` for the post-deployment procedure and `TESTING.md` for observed results only.
